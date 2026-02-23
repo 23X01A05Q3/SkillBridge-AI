@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Upload, FileText, CheckCircle, AlertCircle, Loader2, Search, ArrowRight } from 'lucide-react';
 import { motion } from 'framer-motion';
-import axios from 'axios';
+import { JOBS_DATA, analyzeResume } from '../analyzer';
 
 const springTransition = {
     type: "spring",
@@ -9,49 +9,20 @@ const springTransition = {
     damping: 15
 };
 
-// Use the Render backend URL directly in production, proxy in development
-const API_BASE = import.meta.env.PROD
-    ? 'https://skillbridge-api.onrender.com'
-    : '/api';
-
-// Fallback job roles so the dropdown is never empty (even if backend is sleeping)
-const FALLBACK_JOBS = [
-    { id: 1, role: "Python Developer" },
-    { id: 2, role: "Frontend Developer" },
-    { id: 3, role: "Data Scientist" },
-    { id: 4, role: "DevOps Engineer" },
-    { id: 5, role: "Backend Engineer" },
-    { id: 6, role: "Full Stack Developer" },
-    { id: 7, role: "Mobile Developer" },
-    { id: 8, role: "Cybersecurity Analyst" },
-    { id: 9, role: "UI/UX Designer" }
-];
-
 const UploadSection = ({ onAnalysisComplete }) => {
     const [file, setFile] = useState(null);
-    const [jobs, setJobs] = useState(FALLBACK_JOBS);
-    const [selectedJob, setSelectedJob] = useState(FALLBACK_JOBS[0].id);
+    const [jobs] = useState(JOBS_DATA);
+    const [selectedJob, setSelectedJob] = useState(JOBS_DATA[0].id);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
-    const [backendReady, setBackendReady] = useState(false);
 
-    useEffect(() => {
-        // Try to fetch from backend silently; fallback roles are already shown
-        const fetchJobs = async () => {
-            try {
-                const response = await axios.get(`${API_BASE}/jobs`, { timeout: 45000 });
-                if (response.data && response.data.length > 0) {
-                    setJobs(response.data);
-                    setSelectedJob(response.data[0].id);
-                }
-                setBackendReady(true);
-            } catch (err) {
-                console.warn("Backend not reachable yet, using fallback roles.", err.message);
-                // Fallback roles already loaded — no action needed
-            }
-        };
-        fetchJobs();
-    }, []);
+    const [loadingStage, setLoadingStage] = useState(0);
+    const LOADING_MESSAGES = [
+        "Reading your resume...",
+        "Extracting skills...",
+        "Analyzing match with role...",
+        "Generating recommendations...",
+    ];
 
     const handleFileChange = (e) => {
         const selectedFile = e.target.files[0];
@@ -60,16 +31,6 @@ const UploadSection = ({ onAnalysisComplete }) => {
             setError('');
         }
     };
-
-    const [loadingStage, setLoadingStage] = useState(0);
-
-    const LOADING_MESSAGES = [
-        "Connecting to server...",
-        "Extracting skills from resume...",
-        "Analyzing match with role...",
-        "Generating recommendations...",
-        "Almost done..."
-    ];
 
     const handleUpload = async () => {
         if (!file || !selectedJob) {
@@ -81,27 +42,18 @@ const UploadSection = ({ onAnalysisComplete }) => {
         setLoadingStage(0);
         setError('');
 
-        // Cycle through loading messages every 4 seconds
+        // Cycle through loading messages for visual feedback
         const stageInterval = setInterval(() => {
             setLoadingStage(prev => Math.min(prev + 1, LOADING_MESSAGES.length - 1));
-        }, 4000);
-
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('jobId', selectedJob);
+        }, 600);
 
         try {
-            const response = await axios.post(`${API_BASE}/analyze`, formData, {
-                headers: { 'Content-Type': 'multipart/form-data' },
-                timeout: 120000  // 2 minutes timeout for Render free-tier cold starts
-            });
-            onAnalysisComplete(response.data);
+            // Client-side analysis — instant, no backend needed
+            const result = await analyzeResume(file, selectedJob);
+            onAnalysisComplete(result);
         } catch (err) {
-            if (err.code === 'ERR_NETWORK' || err.code === 'ECONNABORTED') {
-                setError('Server is still waking up (free tier). Please wait 30-60 seconds and try again.');
-            } else {
-                setError(err.response?.data?.error || 'Failed to analyze resume. The server may be starting up — please try again in a moment.');
-            }
+            console.error("Analysis error:", err);
+            setError(err.message || 'Failed to analyze resume. Please try a different file.');
         } finally {
             clearInterval(stageInterval);
             setLoading(false);
