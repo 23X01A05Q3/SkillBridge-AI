@@ -4,6 +4,7 @@ werkzeug
 gunicorn
 spacy
 scikit-learn
-pdfplumber
+pdfminer.six
+nltk
 numpy
 google-generativeai
