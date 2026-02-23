@@ -2,7 +2,7 @@ import re
 import nltk
 import spacy
 import logging
-from pdfminer.high_level import extract_text as extract_pdf_text
+import pdfplumber
 from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer
 from nltk.tokenize import word_tokenize
@@ -38,8 +38,13 @@ class NLPPipeline:
     def extract_text_from_pdf(self, pdf_path):
         try:
             logger.info(f"Extracting text from PDF: {pdf_path}")
-            text = extract_pdf_text(pdf_path)
-            if not text:
+            text = ""
+            with pdfplumber.open(pdf_path) as pdf:
+                for page in pdf.pages:
+                    page_text = page.extract_text()
+                    if page_text:
+                        text += page_text + "\n"
+            if not text.strip():
                 logger.warning(f"No text extracted from {pdf_path}")
             return text
         except Exception as e:
