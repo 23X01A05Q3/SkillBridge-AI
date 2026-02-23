@@ -5,6 +5,7 @@ import Dashboard from './components/Dashboard';
 import LearningRoadmap from './components/LearningRoadmap';
 import VisualBackground from './components/VisualBackground';
 import LoginPage from './pages/LoginPage';
+import AIChatbot from './components/AIChatbot';
 import { Sparkles, BrainCircuit, Terminal, Cpu, Info, Zap, Sun, Moon, LogIn } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -157,6 +158,7 @@ function App() {
                     <Route path="/" element={<MainApp analysisResult={analysisResult} setAnalysisResult={setAnalysisResult} theme={theme} toggleTheme={toggleTheme} />} />
                     <Route path="/login" element={<LoginPage theme={theme} toggleTheme={toggleTheme} />} />
                 </Routes>
+                <AIChatbot />
             </div>
         </BrowserRouter>
     );
