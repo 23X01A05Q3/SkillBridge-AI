@@ -61,6 +61,16 @@ const UploadSection = ({ onAnalysisComplete }) => {
         }
     };
 
+    const [loadingStage, setLoadingStage] = useState(0);
+
+    const LOADING_MESSAGES = [
+        "Connecting to server...",
+        "Extracting skills from resume...",
+        "Analyzing match with role...",
+        "Generating recommendations...",
+        "Almost done..."
+    ];
+
     const handleUpload = async () => {
         if (!file || !selectedJob) {
             setError('Please select a file and a job role');
@@ -68,7 +78,13 @@ const UploadSection = ({ onAnalysisComplete }) => {
         }
 
         setLoading(true);
+        setLoadingStage(0);
         setError('');
+
+        // Cycle through loading messages every 4 seconds
+        const stageInterval = setInterval(() => {
+            setLoadingStage(prev => Math.min(prev + 1, LOADING_MESSAGES.length - 1));
+        }, 4000);
 
         const formData = new FormData();
         formData.append('file', file);
@@ -76,7 +92,8 @@ const UploadSection = ({ onAnalysisComplete }) => {
 
         try {
             const response = await axios.post(`${API_BASE}/analyze`, formData, {
-                headers: { 'Content-Type': 'multipart/form-data' }
+                headers: { 'Content-Type': 'multipart/form-data' },
+                timeout: 120000  // 2 minutes timeout for Render free-tier cold starts
             });
             onAnalysisComplete(response.data);
         } catch (err) {
@@ -86,7 +103,9 @@ const UploadSection = ({ onAnalysisComplete }) => {
                 setError(err.response?.data?.error || 'Failed to analyze resume. The server may be starting up — please try again in a moment.');
             }
         } finally {
+            clearInterval(stageInterval);
             setLoading(false);
+            setLoadingStage(0);
         }
     };
 
@@ -225,7 +244,7 @@ const UploadSection = ({ onAnalysisComplete }) => {
                             {loading ? (
                                 <>
                                     <Loader2 className="w-6 h-6 animate-spin" />
-                                    <span className="tracking-[0.2em] font-black">Analyzing Match...</span>
+                                    <span className="tracking-[0.2em] font-black">{LOADING_MESSAGES[loadingStage]}</span>
                                 </>
                             ) : (
                                 <>
