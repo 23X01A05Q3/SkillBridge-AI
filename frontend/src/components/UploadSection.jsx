@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Upload, FileText, CheckCircle, AlertCircle, Loader2, Search, ArrowRight } from 'lucide-react';
+import { Upload, FileText, CheckCircle, AlertCircle, Loader2, Search, ArrowRight, RefreshCw } from 'lucide-react';
 import { motion } from 'framer-motion';
 import axios from 'axios';
 
@@ -9,23 +9,42 @@ const springTransition = {
     damping: 15
 };
 
+// Use the Render backend URL directly in production, proxy in development
+const API_BASE = import.meta.env.PROD
+    ? 'https://skillbridge-api.onrender.com'
+    : '/api';
+
 const UploadSection = ({ onAnalysisComplete }) => {
     const [file, setFile] = useState(null);
     const [jobs, setJobs] = useState([]);
     const [selectedJob, setSelectedJob] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    const [jobsLoading, setJobsLoading] = useState(true);
+    const [jobsError, setJobsError] = useState(false);
+
+    const fetchJobs = async (retryCount = 0) => {
+        const MAX_RETRIES = 3;
+        setJobsLoading(true);
+        setJobsError(false);
+        try {
+            const response = await axios.get(`${API_BASE}/jobs`, { timeout: 30000 });
+            setJobs(response.data);
+            if (response.data.length > 0) setSelectedJob(response.data[0].id);
+            setJobsLoading(false);
+        } catch (err) {
+            console.error(`Error fetching jobs (attempt ${retryCount + 1}/${MAX_RETRIES})`, err);
+            if (retryCount < MAX_RETRIES - 1) {
+                // Wait 3 seconds before retrying (Render cold-start can take time)
+                setTimeout(() => fetchJobs(retryCount + 1), 3000);
+            } else {
+                setJobsLoading(false);
+                setJobsError(true);
+            }
+        }
+    };
 
     useEffect(() => {
-        const fetchJobs = async () => {
-            try {
-                const response = await axios.get('/api/jobs');
-                setJobs(response.data);
-                if (response.data.length > 0) setSelectedJob(response.data[0].id);
-            } catch (err) {
-                console.error("Error fetching jobs", err);
-            }
-        };
         fetchJobs();
     }, []);
 
@@ -51,7 +70,7 @@ const UploadSection = ({ onAnalysisComplete }) => {
         formData.append('jobId', selectedJob);
 
         try {
-            const response = await axios.post('/api/analyze', formData, {
+            const response = await axios.post(`${API_BASE}/analyze`, formData, {
                 headers: { 'Content-Type': 'multipart/form-data' }
             });
             onAnalysisComplete(response.data);
@@ -105,13 +124,48 @@ const UploadSection = ({ onAnalysisComplete }) => {
                             value={selectedJob}
                             onChange={(e) => setSelectedJob(e.target.value)}
                         >
-                            {jobs.length === 0 && (
+                            {jobsLoading && (
                                 <option value="" disabled>Loading roles...</option>
+                            )}
+                            {!jobsLoading && jobsError && (
+                                <option value="" disabled>Failed to load roles</option>
+                            )}
+                            {!jobsLoading && !jobsError && jobs.length === 0 && (
+                                <option value="" disabled>No roles available</option>
                             )}
                             {jobs.map(job => (
                                 <option key={job.id} value={job.id}>{job.role}</option>
                             ))}
                         </select>
+                        {jobsLoading && (
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginTop: '12px', color: '#94a3b8', fontSize: '13px', fontWeight: 600 }}>
+                                <Loader2 className="w-4 h-4 animate-spin" style={{ color: '#3b82f6' }} />
+                                <span>Waking up the server... This may take up to 30 seconds on first visit.</span>
+                            </div>
+                        )}
+                        {jobsError && (
+                            <motion.div
+                                initial={{ opacity: 0, y: 5 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginTop: '12px' }}
+                            >
+                                <span style={{ color: '#f87171', fontSize: '13px', fontWeight: 600 }}>Server is starting up.</span>
+                                <button
+                                    onClick={() => fetchJobs()}
+                                    style={{
+                                        display: 'flex', alignItems: 'center', gap: '6px',
+                                        padding: '6px 16px', borderRadius: '10px',
+                                        background: 'linear-gradient(135deg, #2563eb, #7c3aed)',
+                                        border: 'none', color: 'white', fontSize: '12px',
+                                        fontWeight: 700, cursor: 'pointer',
+                                        fontFamily: 'Outfit, sans-serif',
+                                    }}
+                                >
+                                    <RefreshCw className="w-3.5 h-3.5" />
+                                    Retry
+                                </button>
+                            </motion.div>
+                        )}
                     </motion.div>
 
                     <div className="relative">
