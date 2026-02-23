@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Upload, FileText, CheckCircle, AlertCircle, Loader2, Search, ArrowRight, RefreshCw } from 'lucide-react';
+import { Upload, FileText, CheckCircle, AlertCircle, Loader2, Search, ArrowRight } from 'lucide-react';
 import { motion } from 'framer-motion';
 import axios from 'axios';
 
@@ -14,37 +14,42 @@ const API_BASE = import.meta.env.PROD
     ? 'https://skillbridge-api.onrender.com'
     : '/api';
 
+// Fallback job roles so the dropdown is never empty (even if backend is sleeping)
+const FALLBACK_JOBS = [
+    { id: 1, role: "Python Developer" },
+    { id: 2, role: "Frontend Developer" },
+    { id: 3, role: "Data Scientist" },
+    { id: 4, role: "DevOps Engineer" },
+    { id: 5, role: "Backend Engineer" },
+    { id: 6, role: "Full Stack Developer" },
+    { id: 7, role: "Mobile Developer" },
+    { id: 8, role: "Cybersecurity Analyst" },
+    { id: 9, role: "UI/UX Designer" }
+];
+
 const UploadSection = ({ onAnalysisComplete }) => {
     const [file, setFile] = useState(null);
-    const [jobs, setJobs] = useState([]);
-    const [selectedJob, setSelectedJob] = useState('');
+    const [jobs, setJobs] = useState(FALLBACK_JOBS);
+    const [selectedJob, setSelectedJob] = useState(FALLBACK_JOBS[0].id);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
-    const [jobsLoading, setJobsLoading] = useState(true);
-    const [jobsError, setJobsError] = useState(false);
-
-    const fetchJobs = async (retryCount = 0) => {
-        const MAX_RETRIES = 3;
-        setJobsLoading(true);
-        setJobsError(false);
-        try {
-            const response = await axios.get(`${API_BASE}/jobs`, { timeout: 30000 });
-            setJobs(response.data);
-            if (response.data.length > 0) setSelectedJob(response.data[0].id);
-            setJobsLoading(false);
-        } catch (err) {
-            console.error(`Error fetching jobs (attempt ${retryCount + 1}/${MAX_RETRIES})`, err);
-            if (retryCount < MAX_RETRIES - 1) {
-                // Wait 3 seconds before retrying (Render cold-start can take time)
-                setTimeout(() => fetchJobs(retryCount + 1), 3000);
-            } else {
-                setJobsLoading(false);
-                setJobsError(true);
-            }
-        }
-    };
+    const [backendReady, setBackendReady] = useState(false);
 
     useEffect(() => {
+        // Try to fetch from backend silently; fallback roles are already shown
+        const fetchJobs = async () => {
+            try {
+                const response = await axios.get(`${API_BASE}/jobs`, { timeout: 45000 });
+                if (response.data && response.data.length > 0) {
+                    setJobs(response.data);
+                    setSelectedJob(response.data[0].id);
+                }
+                setBackendReady(true);
+            } catch (err) {
+                console.warn("Backend not reachable yet, using fallback roles.", err.message);
+                // Fallback roles already loaded — no action needed
+            }
+        };
         fetchJobs();
     }, []);
 
@@ -75,7 +80,11 @@ const UploadSection = ({ onAnalysisComplete }) => {
             });
             onAnalysisComplete(response.data);
         } catch (err) {
-            setError(err.response?.data?.error || 'Failed to analyze resume');
+            if (err.code === 'ERR_NETWORK' || err.code === 'ECONNABORTED') {
+                setError('Server is still waking up (free tier). Please wait 30-60 seconds and try again.');
+            } else {
+                setError(err.response?.data?.error || 'Failed to analyze resume. The server may be starting up — please try again in a moment.');
+            }
         } finally {
             setLoading(false);
         }
@@ -124,48 +133,10 @@ const UploadSection = ({ onAnalysisComplete }) => {
                             value={selectedJob}
                             onChange={(e) => setSelectedJob(e.target.value)}
                         >
-                            {jobsLoading && (
-                                <option value="" disabled>Loading roles...</option>
-                            )}
-                            {!jobsLoading && jobsError && (
-                                <option value="" disabled>Failed to load roles</option>
-                            )}
-                            {!jobsLoading && !jobsError && jobs.length === 0 && (
-                                <option value="" disabled>No roles available</option>
-                            )}
                             {jobs.map(job => (
                                 <option key={job.id} value={job.id}>{job.role}</option>
                             ))}
                         </select>
-                        {jobsLoading && (
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginTop: '12px', color: '#94a3b8', fontSize: '13px', fontWeight: 600 }}>
-                                <Loader2 className="w-4 h-4 animate-spin" style={{ color: '#3b82f6' }} />
-                                <span>Waking up the server... This may take up to 30 seconds on first visit.</span>
-                            </div>
-                        )}
-                        {jobsError && (
-                            <motion.div
-                                initial={{ opacity: 0, y: 5 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginTop: '12px' }}
-                            >
-                                <span style={{ color: '#f87171', fontSize: '13px', fontWeight: 600 }}>Server is starting up.</span>
-                                <button
-                                    onClick={() => fetchJobs()}
-                                    style={{
-                                        display: 'flex', alignItems: 'center', gap: '6px',
-                                        padding: '6px 16px', borderRadius: '10px',
-                                        background: 'linear-gradient(135deg, #2563eb, #7c3aed)',
-                                        border: 'none', color: 'white', fontSize: '12px',
-                                        fontWeight: 700, cursor: 'pointer',
-                                        fontFamily: 'Outfit, sans-serif',
-                                    }}
-                                >
-                                    <RefreshCw className="w-3.5 h-3.5" />
-                                    Retry
-                                </button>
-                            </motion.div>
-                        )}
                     </motion.div>
 
                     <div className="relative">
